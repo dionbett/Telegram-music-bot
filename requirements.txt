@@ -1,2 +1,4 @@
 python-telegram-bot==20.6
-yt-dlp
+yt-dlp==2025.9.23
+httpx==0.25.2
+anyio==4.11.0
