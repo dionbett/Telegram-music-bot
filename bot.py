@@ -4,7 +4,8 @@ import yt_dlp
 import os
 from datetime import datetime
 
-TOKEN = "8420395786:AAGpnMz3ExBad_kQIHv9JB44_vK9zs7kW"
+# Read token from environment variable
+TOKEN = os.getenv("BOT_TOKEN")
 
 # Store user search results temporarily
 user_search_results = {}
@@ -110,6 +111,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(f"❌ Error: {str(e)}")
 
 # Init bot
+if not TOKEN:
+    raise ValueError("⚠️ BOT_TOKEN not set! Please configure it as an environment variable.")
+
 app = Application.builder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_song))
