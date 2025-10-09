@@ -17,7 +17,9 @@ from datetime import datetime
 # === CONFIG ===
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT", 10000))
-APP_URL = f"https://{os.getenv('RENDER_EXTERNAL_URL')}/webhook"
+
+# ✅ Hardcoded Render URL (your public app URL)
+APP_URL = "https://telegram-music-bot-13-oavi.onrender.com/webhook"
 
 if not BOT_TOKEN:
     raise ValueError("⚠️ BOT_TOKEN not set!")
