@@ -12,10 +12,12 @@ from telegram.ext import (
 )
 import yt_dlp
 import asyncio
+import nest_asyncio
+import requests
 
 # === CONFIG ===
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-WEBHOOK_URL = "https://telegram-music-bot-13-oavi.onrender.com"  # your Render app URL
+WEBHOOK_URL = "https://telegram-music-bot-13-oavi.onrender.com"  # your Render URL
 
 # === FLASK APP ===
 app = Flask(__name__)
@@ -42,11 +44,7 @@ def download_audio(url):
         "outtmpl": "%(title)s.%(ext)s",
         "quiet": True,
         "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "192",
-            }
+            {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}
         ],
     }
 
@@ -98,27 +96,38 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 application.add_handler(CallbackQueryHandler(button_handler))
 
-# === WEBHOOK ROUTE ===
+# === INITIALIZE APP FOR WEBHOOK ===
+async def init_app():
+    await application.initialize()
+    await application.start()
+    await application.bot.initialize()
+
+# === FLASK WEBHOOK ===
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    asyncio.run(application.process_update(update))
+    asyncio.create_task(application.process_update(update))  # safe async processing
     return "OK", 200
 
 @app.route("/")
 def index():
     return "🎵 Telegram Music Bot is live!", 200
 
-# === SET WEBHOOK ===
-def set_webhook():
-    import requests
-    url = f"{WEBHOOK_URL}/{BOT_TOKEN}"
-    resp = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={url}")
+# === MAIN ===
+if __name__ == "__main__":
+    # allow nested event loops (Flask + asyncio)
+    nest_asyncio.apply()
+
+    # initialize the Application
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(init_app())
+
+    # set webhook
+    resp = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={WEBHOOK_URL}/{BOT_TOKEN}")
     if resp.status_code == 200:
         logger.info("✅ Webhook set successfully")
     else:
         logger.error(f"❌ Webhook error: {resp.text}")
 
-if __name__ == "__main__":
-    set_webhook()
+    # run Flask
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
