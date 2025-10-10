@@ -1,7 +1,6 @@
 import os
 import logging
 from flask import Flask, request
-from threading import Thread
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -12,6 +11,7 @@ from telegram.ext import (
     filters,
 )
 import yt_dlp
+import asyncio
 
 # === CONFIG ===
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -29,7 +29,6 @@ async def search_song(query):
     try:
         ydl_opts = {"quiet": True, "skip_download": True}
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # 🎵 Search from YouTube Music
             info = ydl.extract_info(f"ytsearch5:{query} site:music.youtube.com", download=False)
             return info["entries"]
     except Exception as e:
@@ -72,12 +71,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ No results found. Try another song.")
         return
 
-    # Build selection buttons
-    buttons = [
-        [InlineKeyboardButton(f"{v['title']}", callback_data=f"song|{v['id']}")]
-        for v in results
-    ]
-
+    buttons = [[InlineKeyboardButton(f"{v['title']}", callback_data=f"song|{v['id']}")] for v in results]
     reply_markup = InlineKeyboardMarkup(buttons)
     await update.message.reply_text("🎧 Choose your song:", reply_markup=reply_markup)
 
@@ -87,10 +81,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data.startswith("song|"):
         video_id = query.data.split("|")[1]
-        video_url = f"https://music.youtube.com/watch?v={video_id}"  # 🎵 YouTube Music link
+        video_url = f"https://music.youtube.com/watch?v={video_id}"
 
         await query.edit_message_text("⬇️ Downloading your song, please wait...")
-
         filename, title = download_audio(video_url)
 
         if filename:
@@ -105,27 +98,27 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 application.add_handler(CallbackQueryHandler(button_handler))
 
-# === WEBHOOK SETUP ===
+# === WEBHOOK ROUTE ===
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    application.update_queue.put_nowait(update)
+    asyncio.run(application.process_update(update))
     return "OK", 200
 
 @app.route("/")
 def index():
     return "🎵 Telegram Music Bot is live!", 200
 
-def run_flask():
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
+# === SET WEBHOOK ===
 def set_webhook():
-    import asyncio
-    async def _set():
-        await application.bot.set_webhook(f"{WEBHOOK_URL}/{BOT_TOKEN}")
-    asyncio.run(_set())
+    import requests
+    url = f"{WEBHOOK_URL}/{BOT_TOKEN}"
+    resp = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={url}")
+    if resp.status_code == 200:
+        logger.info("✅ Webhook set successfully")
+    else:
+        logger.error(f"❌ Webhook error: {resp.text}")
 
 if __name__ == "__main__":
-    Thread(target=run_flask).start()
     set_webhook()
-    application.run_polling(drop_pending_updates=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
